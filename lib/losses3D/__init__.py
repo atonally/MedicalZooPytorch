@@ -25,7 +25,7 @@ def create_loss(name, weight=None, ignore_index=None, pos_weight=None):
     if name == 'BCEWithLogitsLoss':
         return nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     elif name == 'BCEDiceLoss':
-        return BCEDiceLoss(alpha=1, beta=1)
+        return BCEDiceLoss(alpha=0.5, beta=0.5)
     elif name == 'CrossEntropyLoss':
         if ignore_index is None:
             ignore_index = -100  # use the default 'ignore_index' as defined in the CrossEntropyLoss

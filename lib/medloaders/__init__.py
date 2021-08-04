@@ -1,230 +1,133 @@
+import glob, random
+import os
+import numpy as np
 from torch.utils.data import DataLoader
 
-from .COVIDxdataset import COVIDxDataset
-from .Covid_Segmentation_dataset import COVID_Seg_Dataset
-from .brats2018 import MICCAIBraTS2018
-from .brats2019 import MICCAIBraTS2019
-from .brats2020 import MICCAIBraTS2020
-from .covid_ct_dataset import CovidCTDataset
-from .iseg2017 import MRIDatasetISEG2017
-from .iseg2019 import MRIDatasetISEG2019
-from .ixi_t1_t2 import IXIMRIdataset
-from .miccai_2019_pathology import MICCAI2019_gleason_pathology
-from .mrbrains2018 import MRIDatasetMRBRAINS2018
+import lib.utils as utils
+from .CT_organSeg import CT_organSeg
+from .CT_boneSeg import CT_boneSeg
+from .PETCT_lesionDetection import PETCT_lesionDetection
 
 
-def generate_datasets(args, path='.././datasets'):
+def generate_datasets(args, path):
     params = {'batch_size': args.batchSz,
               'shuffle': True,
-              'num_workers': 2}
+              'num_workers': 0}
+    params_val = {'batch_size': args.batchSz_val,
+              'shuffle': True,
+              'num_workers': 0}
     samples_train = args.samples_train
     samples_val = args.samples_val
-    split_percent = args.split
+    train_val_split = args.train_val_split
+    
+    #find number of files in CTdir
+    CTims = []
+    if isinstance(args.ct_dir[0], list):
+        for directory in args.ct_dir[0]: 
+            CTims.extend(glob.glob(directory + "*.n*"))
+    else:
+        for directory in args.ct_dir: 
+            CTims.extend(glob.glob(directory + "*.n*"))
 
-    if args.dataset_name == "iseg2017":
-        total_data = 10
-        split_idx = int(split_percent * total_data)
-        train_loader = MRIDatasetISEG2017(args, 'train', dataset_path=path, crop_dim=args.dim,
-                                          split_id=split_idx, samples=samples_train, load=args.loadData)
+    CTims.sort()
+    
+    if args.keepSplit and not args.VFoldCV:
+        train_idx = np.load(args.save +'/train_inds_' + str(len(CTims)) + 'patients.npy')
+        val_idx =  np.load(args.save +'/val_inds_' + str(len(CTims)) + 'patients.npy')
 
-        val_loader = MRIDatasetISEG2017(args, 'val', dataset_path=path, crop_dim=args.dim, split_id=split_idx,
-                                        samples=samples_val, load=args.loadData)
+    elif not args.VFoldCV:
+        train_val = random.sample(range(len(CTims)), int(np.ceil(1.0*len(CTims)))) #randomly sample patients for train and val
+       
+        # split train and val to feed into loader
+        train_idx = train_val[0:int(np.ceil(train_val_split*len(CTims)))]
+        val_idx = train_val[int(np.ceil(train_val_split*len(CTims))):]
 
-    elif args.dataset_name == "iseg2019":
-        total_data = 10
-        split_idx = int(split_percent * total_data)
-        train_loader = MRIDatasetISEG2019(args, 'train', dataset_path=path, crop_dim=args.dim,
-                                          split_id=split_idx, samples=samples_train, load=args.loadData)
+        #randomly sample for test, save indices for later
+        np.save(args.save + '/train_inds_' + str(len(CTims)) + 'patients', train_idx)
+        np.save(args.save + '/val_inds_' + str(len(CTims)) + 'patients', val_idx)
+    else:
+        if args.Fold == 1 and not args.keepSplit and 'BLandFU' in args.training_type:
+            ## for 5 fold CV, we generate all of the patient inds for the folds but then only train the 1st fold
+            ## to continue training the remaining folds, set args.Fold = 2 or more
+            # if data contains both baseline and follow-up data, we have to group the baseline patients with the follow-up patients
+            CTimsBL = [xx for xx in CTims if 'Baseline' in xx]
+            CTimsFU = [xx for xx in CTims if 'Follow-up' in xx]
+            
+            CTnumsBL = [xx[80:83] for xx in CTimsBL]
+            CTnumsFU = [xx[81:84] for xx in CTimsFU]
+            CTnums = np.concatenate((CTnumsBL, CTnumsFU), 0)
+            folds = [ xx % 5 for xx in range(len(CTims))]
+            random.shuffle(folds)
+            for xx in range(len(folds)):
+                if 'Follow-up' in CTims[xx]:
+                    intersect = [kk for kk in range(len(CTnumsBL)) if CTnums[xx] == CTnumsBL[kk]]
+                    if len(intersect)>0:
+                        folds[xx] = folds[intersect[0]]
+                    
+            for f in range(5):
+                train_val = [xx for xx in range(len(folds)) if folds[xx] != f]
+                test_idx = [xx for xx in range(len(folds)) if folds[xx] == f]
+                # split train and val to feed into loader
+                random.shuffle(train_val)
+                train_idx = train_val[0:int(np.ceil(train_val_split*len(train_val)))]
+                val_idx = train_val[int(np.ceil(train_val_split*len(train_val))):]
+        
+                #randomly sample for test, save indices for later
+                if not os.path.isdir(args.save + '/Fold' + str(f+1)):
+                    utils.make_dirs(args.save + '/Fold' + str(f+1))
+                np.save(args.save + '/Fold' + str(f+1) + '/train_inds_' + str(len(CTims)) + 'patients', train_idx)
+                np.save(args.save + '/Fold' + str(f+1) + '/val_inds_' + str(len(CTims)) + 'patients', val_idx)
+                np.save(args.save + '/Fold' + str(f+1) + '/test_inds_' + str(len(CTims)) + 'patients', test_idx)
+            args.save = args.save + '/Fold1'
+            train_idx = np.load(args.save +'/train_inds_' + str(len(CTims)) + 'patients.npy')
+            val_idx =  np.load(args.save +'/val_inds_' + str(len(CTims)) + 'patients.npy')
+            
+        elif args.Fold == 1 and not args.keepSplit:
+            ## for 5 fold CV, we generate all of the patient inds for the folds but then only train the 1st fold
+            ## to continue training the remaining folds, set args.Fold = 2 or more
+            folds = [ xx % 5 for xx in range(len(CTims))]
+            random.shuffle(folds)
+            for f in range(5):
+                train_val = [xx for xx in range(len(folds)) if folds[xx] != f]
+                test_idx = [xx for xx in range(len(folds)) if folds[xx] == f]
+                # split train and val to feed into loader
+                random.shuffle(train_val)
+                train_idx = train_val[0:int(np.ceil(train_val_split*len(train_val)))]
+                val_idx = train_val[int(np.ceil(train_val_split*len(train_val))):]
+        
+                #randomly sample for test, save indices for later
+                if not os.path.isdir(args.save + '/Fold' + str(f+1)):
+                    utils.make_dirs(args.save + '/Fold' + str(f+1))
+                np.save(args.save + '/Fold' + str(f+1) + '/train_inds_' + str(len(CTims)) + 'patients', train_idx)
+                np.save(args.save + '/Fold' + str(f+1) + '/val_inds_' + str(len(CTims)) + 'patients', val_idx)
+                np.save(args.save + '/Fold' + str(f+1) + '/test_inds_' + str(len(CTims)) + 'patients', test_idx)
+            args.save = args.save + '/Fold1'
+            train_idx = np.load(args.save +'/train_inds_' + str(len(CTims)) + 'patients.npy')
+            val_idx =  np.load(args.save +'/val_inds_' + str(len(CTims)) + 'patients.npy')
+        else:
+            args.save = args.save + '/Fold' + str(args.Fold)
+            train_idx = np.load(args.save +'/train_inds_' + str(len(CTims)) + 'patients.npy')
+            val_idx =  np.load(args.save +'/val_inds_' + str(len(CTims)) + 'patients.npy')
+        
+        
+    if args.training_type == "CT_organSeg":
+        train_loader = CT_organSeg(args, 'train', samples_train, train_idx, dataset_path=path, crop_dim=args.dim, load=args.loadData)
 
-        val_loader = MRIDatasetISEG2019(args, 'val', dataset_path=path, crop_dim=args.dim, split_id=split_idx,
-                                        samples=samples_val, load=args.loadData)
-    elif args.dataset_name == "mrbrains4":
-        train_loader = MRIDatasetMRBRAINS2018(args, 'train', dataset_path=path, classes=args.classes, dim=args.dim,
-                                              split_id=0, samples=samples_train, load=args.loadData)
+        val_loader = CT_organSeg(args, 'val', samples_val, val_idx, dataset_path=path, crop_dim=args.dim, load=args.loadData)
+        val_generator = DataLoader(val_loader, **params_val)
+    if args.training_type == "PETCT_lesionDetection" or args.training_type == 'PETCT_lesionDetection_BLandFU':
+        train_loader = PETCT_lesionDetection(args, 'train', samples_train, train_idx, dataset_path=path, crop_dim=args.dim, load=args.loadData)
 
-        val_loader = MRIDatasetMRBRAINS2018(args, 'val', dataset_path=path, classes=args.classes, dim=args.dim,
-                                            split_id=0,
-                                            samples=samples_val, load=args.loadData)
-    elif args.dataset_name == "mrbrains9":
-        train_loader = MRIDatasetMRBRAINS2018(args, 'train', dataset_path=path, classes=args.classes, dim=args.dim,
-                                              split_id=0, samples=samples_train, load=args.loadData)
+        val_loader = PETCT_lesionDetection(args, 'val', samples_val, val_idx, dataset_path=path, crop_dim=args.dim, load=args.loadData)
+        val_generator = DataLoader(val_loader, **params_val)
+    if args.training_type == "CT_boneSeg":
+        train_loader = CT_boneSeg(args, 'train', samples_train, train_idx, dataset_path=path, crop_dim=args.dim, load=args.loadData)
+        val_loader = CT_boneSeg(args, 'val', samples_val, val_idx, dataset_path=path, crop_dim=args.dim, load=args.loadData)
+        #val_generator = None
+        val_generator = DataLoader(val_loader, **params_val)
 
-        val_loader = MRIDatasetMRBRAINS2018(args, 'val', dataset_path=path, classes=args.classes,
-                                            dim=args.dim,
-                                            split_id=0,
-                                            samples=samples_val, load=args.loadData)
-    elif args.dataset_name == "miccai2019":
-        total_data = 244
-        split_idx = int(split_percent * total_data) - 1
-
-        val_loader = MICCAI2019_gleason_pathology(args, 'val', dataset_path=path, split_idx=split_idx,
-                                                  crop_dim=args.dim,
-                                                  classes=args.classes, samples=samples_val,
-                                                  save=True)
-
-        print('Generating train set...')
-        train_loader = MICCAI2019_gleason_pathology(args, 'train', dataset_path=path, split_idx=split_idx,
-                                                    crop_dim=args.dim,
-                                                    classes=args.classes, samples=samples_train,
-                                                    save=True)
-
-    elif args.dataset_name == "ixi":
-        loader = IXIMRIdataset(args, dataset_path=path, voxels_space=args.dim, modalities=args.inModalities, save=True)
-        generator = DataLoader(loader, **params)
-        return generator, loader.affine
-
-    elif args.dataset_name == "brats2018":
-        total_data = 244
-        split_idx = int(split_percent * total_data)
-        train_loader = MICCAIBraTS2018(args, 'train', dataset_path=path, classes=args.classes, crop_dim=args.dim,
-                                       split_idx=split_idx, samples=samples_train, load=args.loadData)
-
-        val_loader = MICCAIBraTS2018(args, 'val', dataset_path=path, classes=args.classes, crop_dim=args.dim,
-                                     split_idx=split_idx,
-                                     samples=samples_val, load=args.loadData)
-
-    elif args.dataset_name == "brats2019":
-        split = (0.8, 0.2)
-        total_data = 335
-        split_idx = int(split[0] * total_data)
-        train_loader = MICCAIBraTS2019(args, 'train', dataset_path=path, classes=args.classes, crop_dim=args.dim,
-                                       split_idx=split_idx, samples=samples_train, load=args.loadData)
-
-        val_loader = MICCAIBraTS2019(args, 'val', dataset_path=path, classes=args.classes, crop_dim=args.dim,
-                                     split_idx=split_idx,
-                                     samples=samples_val, load=args.loadData)
-
-    elif args.dataset_name == "brats2020":
-        split = (0.8, 0.2)
-        total_data = 335
-        split_idx = int(split[0] * total_data)
-        train_loader = MICCAIBraTS2020(args, 'train', dataset_path=path, classes=args.classes, crop_dim=args.dim,
-                                       split_idx=split_idx, samples=samples_train, load=args.loadData)
-
-        val_loader = MICCAIBraTS2020(args, 'val', dataset_path=path, classes=args.classes, crop_dim=args.dim,
-                                     split_idx=split_idx,
-                                     samples=samples_val, load=args.loadData)
-    elif args.dataset_name == 'COVID_CT':
-        train_loader = CovidCTDataset('train', root_dir='.././datasets/covid_ct_dataset/',
-                                      txt_COVID='.././datasets/covid_ct_dataset/trainCT_COVID.txt',
-                                      txt_NonCOVID='.././datasets/covid_ct_dataset/trainCT_NonCOVID.txt')
-        val_loader = CovidCTDataset('val', root_dir='.././datasets/covid_ct_dataset',
-                                    txt_COVID='.././datasets/covid_ct_dataset/valCT_COVID.txt',
-                                    txt_NonCOVID='.././datasets/covid_ct_dataset/valCT_NonCOVID.txt')
-    elif args.dataset_name == 'COVIDx':
-        train_loader = COVIDxDataset(mode='train', n_classes=args.classes, dataset_path=path,
-                                     dim=(224, 224))
-        val_loader = COVIDxDataset(mode='val', n_classes=args.classes, dataset_path=path,
-                                   dim=(224, 224))
-
-    elif args.dataset_name == 'covid_seg':
-        train_loader = COVID_Seg_Dataset(mode='train', dataset_path=path, crop_dim=args.dim,
-                                         fold=0, samples=samples_train)
-
-        val_loader = COVID_Seg_Dataset(mode='val', dataset_path=path, crop_dim=args.dim,
-                                       fold=0, samples=samples_val)
     training_generator = DataLoader(train_loader, **params)
-    val_generator = DataLoader(val_loader, **params)
+
 
     print("DATA SAMPLES HAVE BEEN GENERATED SUCCESSFULLY")
-    return training_generator, val_generator, val_loader.full_volume, val_loader.affine
-
-
-def select_full_volume_for_infer(args, path='.././datasets'):
-    params = {'batch_size': args.batchSz,
-              'shuffle': True,
-              'num_workers': 2}
-    samples_train = args.samples_train
-    samples_val = args.samples_val
-    split_percent = args.split
-
-    if args.dataset_name == "iseg2017":
-        total_data = 10
-        split_idx = int(split_percent * total_data)
-        loader = MRIDatasetISEG2017('viz', dataset_path=path, crop_dim=args.dim,
-                                    split_id=split_idx, samples=samples_train)
-
-
-    elif args.dataset_name == "iseg2019":
-        total_data = 10
-        split_idx = int(split_percent * total_data)
-        train_loader = MRIDatasetISEG2019('train', dataset_path=path, crop_dim=args.dim,
-                                          split_id=split_idx, samples=samples_train)
-
-        val_loader = MRIDatasetISEG2019('val', dataset_path=path, crop_dim=args.dim, split_id=split_idx,
-                                        samples=samples_val)
-    elif args.dataset_name == "mrbrains4":
-        train_loader = MRIDatasetMRBRAINS2018('train', dataset_path=path, classes=args.classes, dim=args.dim,
-                                              split_id=0, samples=samples_train)
-
-        val_loader = MRIDatasetMRBRAINS2018('val', dataset_path=path, classes=args.classes, dim=args.dim,
-                                            split_id=0,
-                                            samples=samples_val)
-    elif args.dataset_name == "mrbrains9":
-        train_loader = MRIDatasetMRBRAINS2018('train', dataset_path=path, classes=args.classes, dim=args.dim,
-                                              split_id=0, samples=samples_train)
-
-        val_loader = MRIDatasetMRBRAINS2018('val', dataset_path=path, classes=args.classes,
-                                            dim=args.dim,
-                                            split_id=0,
-                                            samples=samples_val)
-    elif args.dataset_name == "miccai2019":
-        total_data = 244
-        split_idx = int(split_percent * total_data) - 1
-
-        val_loader = MICCAI2019_gleason_pathology('val', dataset_path=path, split_idx=split_idx, crop_dim=args.dim,
-                                                  classes=args.classes, samples=samples_val,
-                                                  save=True)
-
-        print('Generating train set...')
-        train_loader = MICCAI2019_gleason_pathology('train', dataset_path=path, split_idx=split_idx, crop_dim=args.dim,
-                                                    classes=args.classes, samples=samples_train,
-                                                    save=True)
-
-    elif args.dataset_name == "ixi":
-        loader = IXIMRIdataset(dataset_path=path, voxels_space=args.dim, modalities=args.inModalities, save=True)
-        generator = DataLoader(loader, **params)
-        return generator, loader.affine
-
-    elif args.dataset_name == "brats2018":
-        total_data = 244
-        split_idx = int(split_percent * total_data)
-        train_loader = MICCAIBraTS2018('train', dataset_path=path, classes=args.classes, crop_dim=args.dim,
-                                       split_idx=split_idx, samples=samples_train)
-
-        val_loader = MICCAIBraTS2018('val', dataset_path=path, classes=args.classes, crop_dim=args.dim,
-                                     split_idx=split_idx,
-                                     samples=samples_val)
-
-    elif args.dataset_name == "brats2019":
-        split = (0.8, 0.2)
-        total_data = 335
-        split_idx = int(split[0] * total_data)
-        train_loader = MICCAIBraTS2018('train', dataset_path=path, classes=args.classes, crop_dim=args.dim,
-                                       split_idx=split_idx, samples=samples_train)
-
-        val_loader = MICCAIBraTS2018('val', dataset_path=path, classes=args.classes, crop_dim=args.dim,
-                                     split_idx=split_idx,
-                                     samples=samples_val)
-    elif args.dataset_name == 'COVID_CT':
-        train_loader = CovidCTDataset('train', root_dir='.././datasets/covid_ct_dataset/',
-                                      txt_COVID='.././datasets/covid_ct_dataset/trainCT_COVID.txt',
-                                      txt_NonCOVID='.././datasets/covid_ct_dataset/trainCT_NonCOVID.txt')
-        val_loader = CovidCTDataset('val', root_dir='.././datasets/covid_ct_dataset',
-                                    txt_COVID='.././datasets/covid_ct_dataset/valCT_COVID.txt',
-                                    txt_NonCOVID='.././datasets/covid_ct_dataset/valCT_NonCOVID.txt')
-    elif args.dataset_name == 'COVIDx':
-        train_loader = COVIDxDataset(mode='train', n_classes=args.classes, dataset_path=path,
-                                     dim=(224, 224))
-        val_loader = COVIDxDataset(mode='val', n_classes=args.classes, dataset_path=path,
-                                   dim=(224, 224))
-
-    elif args.dataset_name == 'covid_seg':
-        train_loader = COVID_Seg_Dataset(mode='train', dataset_path=path, crop_dim=args.dim,
-                                         fold=0, samples=samples_train)
-
-        val_loader = COVID_Seg_Dataset(mode='val', dataset_path=path, crop_dim=args.dim,
-                                       fold=0, samples=samples_val)
-
-    print("DATA SAMPLES HAVE BEEN GENERATED SUCCESSFULLY")
-    return loader.full_volume, loader.affine
+    return training_generator, val_generator

@@ -1,8 +1,8 @@
 import numpy as np
 import scipy.ndimage as ndimage
+from lib.medloaders.medical_image_process import rescale_data_volume
 
-
-def random_rotate3D(img_numpy, min_angle, max_angle):
+def random_rotate3D(img_numpy, label, min_angle, max_angle):
     """
     Returns a random rotated array in the same shape
     :param img_numpy: 3D numpy array
@@ -17,11 +17,14 @@ def random_rotate3D(img_numpy, min_angle, max_angle):
     angle = np.random.randint(low=min_angle, high=max_angle + 1)
     axes_random_id = np.random.randint(low=0, high=len(all_axes))
     axes = all_axes[axes_random_id]
-    return ndimage.rotate(img_numpy, angle, axes=axes)
+    if label.any() != None:
+        label = ndimage.rotate(label, angle, axes=axes, reshape = False, order=0)
+    numpy_rotated = ndimage.rotate(img_numpy, angle, axes=axes, reshape = False)
+    return numpy_rotated, label
 
 
 class RandomRotation(object):
-    def __init__(self, min_angle=-10, max_angle=10):
+    def __init__(self, min_angle=-20, max_angle=20):
         self.min_angle = min_angle
         self.max_angle = max_angle
 
@@ -35,7 +38,9 @@ class RandomRotation(object):
             img_numpy (numpy): rotated img.
             label (numpy): rotated Label segmentation map.
         """
-        img_numpy = random_rotate3D(img_numpy, self.min_angle, self.max_angle)
-        if label.any() != None:
-            label = random_rotate3D(label, self.min_angle, self.max_angle)
+        initial_size = np.shape(img_numpy)
+        img_numpy, label = random_rotate3D(img_numpy, label, self.min_angle, self.max_angle)
+        
+        img_numpy = rescale_data_volume(img_numpy, initial_size).astype(np.float32)
+        label = rescale_data_volume(label, initial_size)
         return img_numpy, label

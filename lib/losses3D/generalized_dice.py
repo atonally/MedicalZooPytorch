@@ -1,6 +1,5 @@
 from lib.losses3D.BaseClass import _AbstractDiceLoss
-from lib.losses3D.basic import *
-
+import torch
 
 # Code was adapted and modified from https://github.com/wolny/pytorch-3dunet/blob/master/pytorch3dunet/unet3d/losses.py
 
@@ -8,7 +7,7 @@ from lib.losses3D.basic import *
 class GeneralizedDiceLoss(_AbstractDiceLoss):
     """Computes Generalized Dice Loss (GDL) as described in https://arxiv.org/pdf/1707.03237.pdf.
     """
-
+    
     def __init__(self, classes=4, sigmoid_normalization=True, skip_index_after=None, epsilon=1e-6,):
         super().__init__(weight=None, sigmoid_normalization=sigmoid_normalization)
         self.epsilon = epsilon
@@ -40,3 +39,18 @@ class GeneralizedDiceLoss(_AbstractDiceLoss):
         denominator = (denominator * w_l).clamp(min=self.epsilon)
 
         return 2 * (intersect.sum() / denominator.sum())
+         
+
+def flatten(tensor):
+    """Flattens a given tensor such that the channel axis is first.
+    The shapes are transformed as follows:
+       (N, C, D, H, W) -> (C, N * D * H * W)
+    """
+    # number of channels
+    C = tensor.size(1)
+    # new axis order
+    axis_order = (1, 0) + tuple(range(2, tensor.dim()))
+    # Transpose: (N, C, D, H, W) -> (C, N, D, H, W)
+    transposed = tensor.permute(axis_order)
+    # Flatten: (C, N, D, H, W) -> (C, N * D * H * W)
+    return transposed.contiguous().view(C, -1)

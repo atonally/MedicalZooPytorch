@@ -1,7 +1,7 @@
 import torch
 from torch import nn as nn
 
-from lib.losses3D.basic import expand_as_one_hot
+from lib.losses3D.basic import expand_as_one_hot, compute_per_channel_dice
 
 
 # Code was adapted and mofified from https://github.com/wolny/pytorch-3dunet/blob/master/pytorch3dunet/unet3d/losses.py
@@ -59,7 +59,7 @@ class _AbstractDiceLoss(nn.Module):
         per_channel_dice = self.dice(input, target, weight=self.weight)
 
         loss = (1. - torch.mean(per_channel_dice))
-        per_channel_dice = per_channel_dice.detach().cpu().numpy()
-
+        per_channel_dice = compute_per_channel_dice(input, target)
+        
         # average Dice score across all channels/classes
-        return loss, per_channel_dice
+        return loss, per_channel_dice.cpu().detach().numpy()

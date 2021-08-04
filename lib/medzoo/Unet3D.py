@@ -10,14 +10,14 @@ class UNet3D(BaseModel):
     Implementations based on the Unet3D paper: https://arxiv.org/abs/1606.06650
     """
 
-    def __init__(self, in_channels, n_classes, base_n_filter=8):
+    def __init__(self, in_channels, n_classes, base_n_filter=32):
         super(UNet3D, self).__init__()
         self.in_channels = in_channels
         self.n_classes = n_classes
         self.base_n_filter = base_n_filter
 
         self.lrelu = nn.LeakyReLU()
-        self.dropout3d = nn.Dropout3d(p=0.6)
+        self.dropout3d = nn.Dropout3d(p=0.1)
         self.upsacle = nn.Upsample(scale_factor=2, mode='nearest')
         self.softmax = nn.Softmax(dim=1)
 

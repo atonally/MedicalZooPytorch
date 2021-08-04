@@ -30,7 +30,7 @@ class RandomChoice(object):
         if not augment:
             return img_tensors, label
         t = random.choice(self.transforms)
-
+        #img_tensors, label = t(img_tensors, label)
         for i in range(len(img_tensors)):
 
             if i == (len(img_tensors) - 1):

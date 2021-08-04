@@ -8,7 +8,7 @@ import pickle
 import numpy as np
 import torch
 import torch.backends.cudnn as cudnn
-
+import torch.nn.functional as F
 
 def reproducibility(args, seed):
     torch.manual_seed(seed)
@@ -85,7 +85,9 @@ def prepare_input(input_tuple, inModalities=-1, inChannels=-1, cuda=False, args=
 
     if in_cuda:
         input_tensor, target = input_tensor.cuda(), target.cuda()
-
+    if args.model == 'DEEPMEDIC':
+        input_tensor, target = split_input(input_tensor, target)
+        
     return input_tensor, target
 
 
@@ -121,3 +123,39 @@ def load_list(name):
     with open(name, "rb") as fp:
         list_file = pickle.load(fp)
     return list_file
+
+
+def split_input(x, target, normal_patchsize=61, downsample_factor=[3, 5]):
+    normalRes_endSize = normal_patchsize - 16 # 16 = (kernelsize-1)*num_layers = 2*8
+    ds1_patchsize = np.ceil(normalRes_endSize/downsample_factor[0]) + 16
+    ds2_patchsize = np.ceil(normalRes_endSize/downsample_factor[1]) + 16
+
+    
+    x_center = np.floor(x.shape[2]/2).astype(np.int)
+    half_ps = np.floor(normal_patchsize/2).astype(np.int)
+    x1 = x[:,:, x_center-half_ps:x_center+half_ps+1,
+           x_center-half_ps:x_center+half_ps+1,  
+           x_center-half_ps:x_center+half_ps+1]
+        
+    if target is not None:
+        half_ps = np.floor(normalRes_endSize/2).astype(np.int)
+        target = target[:,  x_center-half_ps:x_center+half_ps+1,
+               x_center-half_ps:x_center+half_ps+1,  
+               x_center-half_ps:x_center+half_ps+1]
+
+    
+    x2 = F.interpolate(x, scale_factor = 1/downsample_factor[0],recompute_scale_factor=False, mode='trilinear',align_corners=True)
+    x_center = np.floor(x2.shape[2]/2).astype(np.int)
+    half_ps = np.floor(ds1_patchsize/2).astype(np.int)
+    x2 = x2[:, :,x_center-half_ps:x_center+half_ps+1,
+           x_center-half_ps:x_center+half_ps+1,  
+           x_center-half_ps:x_center+half_ps+1]
+    
+    x3 = F.interpolate(x, scale_factor = 1/downsample_factor[1],recompute_scale_factor=False, mode = 'trilinear',align_corners=True)
+    x_center = np.floor(x3.shape[2]/2).astype(np.int)
+    half_ps = np.floor(ds2_patchsize/2).astype(np.int)
+    x3 = x3[:, :,x_center-half_ps:x_center+half_ps+1,
+           x_center-half_ps:x_center+half_ps+1,  
+           x_center-half_ps:x_center+half_ps+1]
+    
+    return (x1, x2, x3), target
