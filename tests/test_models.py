@@ -1,6 +1,6 @@
 # Python libraries
 import argparse
-import lib.medzoo as medzoo
+import medzoopytorch.medzoo as medzoo
 
 
 def main():

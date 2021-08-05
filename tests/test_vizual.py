@@ -3,12 +3,12 @@ import argparse
 import os
 
 # Lib files
-import lib.medloaders as medical_loaders
-import lib.medzoo as medzoo
-import lib.train as train
-import lib.utils as utils
-from lib.losses3D import DiceLoss
-from lib.visual3D_temp import *
+import medzoopytorch.medloaders as medical_loaders
+import medzoopytorch.medzoo as medzoo
+import medzoopytorch.train as train
+import medzoopytorch.utils as utils
+from medzoopytorch.losses3D import DiceLoss
+from medzoopytorch.visual3D_temp import *
 
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 seed = 1777777

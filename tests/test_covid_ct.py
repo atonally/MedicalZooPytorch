@@ -4,10 +4,10 @@ import os
 
 from torch.utils.tensorboard import SummaryWriter
 
-import lib.medloaders as medical_loaders
-import lib.medzoo as medzoo
-import lib.utils as utils
-from lib.train.train_covid import train, validation
+import medzoopytorch.medloaders as medical_loaders
+import medzoopytorch.medzoo as medzoo
+import medzoopytorch.utils as utils
+from medzoopytorch.train.train_covid import train, validation
 
 
 def main():

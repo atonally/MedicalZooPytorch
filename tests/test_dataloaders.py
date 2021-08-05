@@ -2,8 +2,7 @@
 import argparse
 
 # Lib files
-import lib.utils as utils
-import lib.medloaders as medical_loaders
+import medzoopytorch.medloaders as medical_loaders
 
 
 class TestDataLoaders:

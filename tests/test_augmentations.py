@@ -1,10 +1,9 @@
-from lib.medloaders.medical_loader_utils import generate_padded_subvolumes
 import torch
 import matplotlib.pyplot as plt
-import lib.augment3D as augment
+import medzoopytorch.augment3D as augment
 
 size = 32
-from lib.medloaders.medical_image_process import load_medical_image
+from medzoopytorch.medloaders import load_medical_image
 
 # t1 = torch.randn(size,size,size).numpy()
 # t2  = torch.randn(size,size,size).numpy()

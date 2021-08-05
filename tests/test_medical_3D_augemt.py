@@ -3,8 +3,8 @@ import nibabel as nib
 import numpy as np
 import matplotlib.pyplot as plt
 
-from lib.augment3D import *
-from lib.visual3D_temp import show_mid_slice
+from medzoopytorch.augment3D import *
+from medzoopytorch.visual3D_temp import show_mid_slice
 
 url_1 = "https://nipy.org/nibabel/_downloads/c16214e490de2a223655d30f4ba78f15/someones_anatomy.nii.gz"
 url_2 = "https://nipy.org/nibabel/_downloads/f76cc5a46e5368e2c779868abc49e497/someones_epi.nii.gz"

@@ -2,16 +2,16 @@
 import torch
 
 # these losses work with target 4D shape [batch, dim_1, dim_2, dim_3 ]
-from lib.losses3D.BCE_dice import BCEDiceLoss
-from lib.losses3D.generalized_dice import GeneralizedDiceLoss
-from lib.losses3D.dice import DiceLoss
-from lib.losses3D.weight_smooth_l1 import WeightedSmoothL1Loss
-from lib.losses3D.tags_angular_loss import TagsAngularLoss
-from lib.losses3D.ContrastiveLoss import ContrastiveLoss
-from lib.losses3D.weight_cross_entropy import WeightedCrossEntropyLoss
+from medzoopytorch.losses3D.BCE_dice import BCEDiceLoss
+from medzoopytorch.losses3D.generalized_dice import GeneralizedDiceLoss
+from medzoopytorch.losses3D.dice import DiceLoss
+from medzoopytorch.losses3D.weight_smooth_l1 import WeightedSmoothL1Loss
+from medzoopytorch.losses3D.tags_angular_loss import TagsAngularLoss
+from medzoopytorch.losses3D.ContrastiveLoss import ContrastiveLoss
+from medzoopytorch.losses3D.weight_cross_entropy import WeightedCrossEntropyLoss
 
 # not working yet - todo
-from lib.losses3D.pixel_wise_cross_entropy import PixelWiseCrossEntropyLoss
+from medzoopytorch.losses3D.pixel_wise_cross_entropy import PixelWiseCrossEntropyLoss
 
 
 class TestCriterion:

@@ -1,15 +1,13 @@
 import argparse
-import os
 
 import torch
-import torch.nn.functional as F
 
 # Lib files
-import lib.utils as utils
-import lib.medloaders as medical_loaders
-import lib.medzoo as medzoo
-from lib.visual3D_temp import non_overlap_padding,test_padding
-from lib.losses3D import DiceLoss
+import medzoopytorch.utils as utils
+import medzoopytorch.medloaders as medical_loaders
+import medzoopytorch.medzoo as medzoo
+from medzoopytorch.visual3D_temp import non_overlap_padding
+from medzoopytorch.losses3D import DiceLoss
 #
 
 def main():

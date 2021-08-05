@@ -2,8 +2,8 @@ import argparse
 
 import numpy as np
 
-from lib.utils import datestr
-from lib.visual3D_temp import TensorboardWriter
+from medzoopytorch.utils import datestr
+from medzoopytorch.visual3D_temp import TensorboardWriter
 
 
 def get_arguments():
